@@ -1,0 +1,36 @@
+{
+  "name": "caliber-automation",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright (JavaScript) automation for Caliber Card: signup, login (OTP), RSVP, Experience, Admin",
+  "scripts": {
+    "test": "playwright test",
+    "ui": "playwright test --ui",
+    "debug": "playwright test --debug",
+    "report": "playwright show-report",
+    "install:browsers": "playwright install chromium",
+    "codegen": "playwright codegen https://calibercard.yatilabs.com",
+    "codegen:admin": "playwright codegen https://calibercard-range.yatilabs.com/home",
+
+    "consumer": "playwright test --project=chromium",
+    "consumer:setup": "playwright test --project=setup",
+    "consumer:rsvp": "playwright test tests/consumer/02-rsvp --project=chromium",
+    "consumer:experience": "playwright test tests/consumer/03-experience --project=chromium",
+
+    "admin": "playwright test --project=admin",
+    "admin:login": "playwright test tests/admin/01-auth/admin-login.spec.js --project=admin",
+    "admin:create-range": "playwright test tests/admin/02-range/create-range.spec.js --project=admin",
+    "admin:experience": "playwright test tests/admin/03-experience/create-experience.spec.js --project=admin --workers=1",
+    "admin:experience:positive": "playwright test tests/admin/03-experience/create-experience.spec.js --project=admin -g \"positive\" --workers=1",
+    "admin:experience:negative": "playwright test tests/admin/03-experience/create-experience.spec.js --project=admin -g \"negative\" --workers=1"
+  },
+
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "imapflow": "^1.0.164",
+    "mailparser": "^3.7.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  }
+}
