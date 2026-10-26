@@ -153,20 +153,28 @@ class StaffPage extends BasePage {
     await this.waitReady();
     const roleInput = this.selectRoleInput();
     await roleInput.click({ force: true });
+    await this.page.waitForTimeout(600);
+
+    // Target the specific role dropdown list containing 'Select All'
+    const roleList = this.page
+      .locator('ul, [role="list"], .dropdown-content, .select-panel')
+      .filter({ has: this.page.getByText(/Select All/i) })
+      .first();
+    await roleList.waitFor({ state: 'visible', timeout: 5000 });
+
+    const roleItems = roleList.locator('li, [role="listitem"]').filter({ hasNotText: /Select All/i });
+    const matchingItem = roleItems.filter({ hasText: new RegExp(roleName, 'i') }).first();
+
+    if ((await matchingItem.count()) > 0) {
+      await matchingItem.click({ force: true });
+    } else {
+      // Pick first available role item
+      await roleItems.first().click({ force: true });
+    }
     await this.page.waitForTimeout(400);
 
-    const roleOption = this.page.locator('li.option').filter({ hasText: new RegExp(`^${roleName}$`, 'i') }).first();
-    if (await roleOption.isVisible()) {
-      await roleOption.click();
-    } else {
-      // Fallback: pick the standard 'Staff' role
-      const defaultStaff = this.page.locator('li.option').filter({ hasText: /^Staff$/ }).first();
-      await defaultStaff.click();
-    }
-    await this.page.waitForTimeout(300);
-
-    // Dismiss role dropdown overlay by clicking neutral area
-    await this.page.locator('h6:has-text("Search Existing Customer")').click();
+    // Dismiss role dropdown overlay by clicking neutral header
+    await this.page.locator('h6:has-text("Search Existing Customer"), h3:has-text("Add Staff")').first().click({ force: true });
     await this.page.waitForTimeout(300);
   }
 
@@ -202,6 +210,26 @@ class StaffPage extends BasePage {
   }
 
   // ───────────────────────── Staff Listing Verifications ─────────────────────────
+
+  /**
+   * Ensures that a customer is added as a staff member.
+   * If not already present in the listing, it adds them.
+   */
+  async ensureStaffMemberAdded(email, name = 'test user', roleName = 'Staff') {
+    await this.navigateViaMenu();
+    const existing = this.page.locator('div').filter({ hasText: email }).last();
+    if (await existing.isVisible({ timeout: 3000 }).catch(() => false)) {
+      return;
+    }
+
+    // Add the staff member
+    await this.clickAdd();
+    await this.searchCustomer(email);
+    await this.selectCustomerFromDropdown(name);
+    await this.selectRole(roleName);
+    await this.saveAndExpectSuccess();
+    await this.verifyStaffInListing(email);
+  }
 
   /**
    * Verifies that a staff member with the given email appears in the Staff listing.

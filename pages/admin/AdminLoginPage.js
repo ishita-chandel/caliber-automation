@@ -180,8 +180,8 @@ class AdminLoginPage extends BasePage {
     // or upon landing on the dashboard as a gate modal (#trnAgreementGateModal).
     // We give it a generous check and wait for any skeleton loader to settle.
     // -----------------------------------------------------------------
-    const agreementModal = this.page.locator('#trnAgreementGateModal, .sign-agreement-modal, [class*="sign-agreement-modal" i]').first();
-    const isAgreementVisible = await agreementModal.isVisible({ timeout: 8000 }).catch(() => false);
+    const agreementModal = this.page.locator('.modal.show, .sign-agreement-modal.show, #trnAgreementGateModal.show, #scheduleAAgreementGateModal.show').first();
+    const isAgreementVisible = await agreementModal.isVisible({ timeout: 6000 }).catch(() => false);
 
     if (isAgreementVisible) {
       console.log('[admin-login] >>> "Sign Agreement" popup detected -> Completing first-time agreement signing...');
@@ -209,14 +209,23 @@ class AdminLoginPage extends BasePage {
    * 6. Submits and waits for modal to close
    */
   async signAgreementModal(modalLocator, email = cfg.ADMIN_EMAIL) {
-    const modal = modalLocator || this.page.locator('#trnAgreementGateModal, .sign-agreement-modal').first();
+    const modal = modalLocator || this.page.locator('.modal.show, .sign-agreement-modal.show, #scheduleAAgreementGateModal.show, #trnAgreementGateModal.show, .modal:visible').first();
     console.log('[admin-agreement] Handling agreement signing inside modal...');
 
     // Wait for skeletons/loaders inside modal to resolve
     await modal.locator('.react-loading-skeleton, .spinner, .loader').first().waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
-    await this.page.waitForTimeout(1000);
+    await this.page.waitForTimeout(600);
 
-    const emailLocalPart = email.split('@')[0];
+    // Scroll modal body down to activate and reveal digital signature section
+    await modal.evaluate((m) => {
+      const body = m.querySelector('.sign-agreement-modal__body, .modal-body') || m;
+      body.scrollTop = body.scrollHeight;
+    }).catch(() => {});
+    await this.page.waitForTimeout(500);
+
+    const emailVal = await modal.locator('input#signer_email, input[name="signer_email"]').inputValue().catch(() => '');
+    const effectiveEmail = emailVal || email || cfg.ADMIN_EMAIL;
+    const emailLocalPart = effectiveEmail.split('@')[0];
 
     // Signer Name
     const signerNameInput = modal.locator('input#signer_name, input[name="signer_name"]').first();
@@ -229,9 +238,14 @@ class AdminLoginPage extends BasePage {
 
     // Signer Title: scroll into view and fill
     const signerTitleInput = modal.locator('input#signer_title, input[name="signer_title"]').first();
+    await signerTitleInput.scrollIntoViewIfNeeded().catch(() => {});
     if (await signerTitleInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await signerTitleInput.scrollIntoViewIfNeeded().catch(() => {});
-      await signerTitleInput.fill(emailLocalPart);
+      const currentTitle = await signerTitleInput.inputValue().catch(() => '');
+      if (!currentTitle.trim()) {
+        await signerTitleInput.fill(emailLocalPart || 'Manager');
+        await signerTitleInput.dispatchEvent('input').catch(() => {});
+        await signerTitleInput.dispatchEvent('change').catch(() => {});
+      }
     }
 
     // Check all acknowledgment checkboxes if any exist
@@ -274,7 +288,7 @@ class AdminLoginPage extends BasePage {
 
     // Also trigger touch/pointer/canvas events directly in page context as robust backup
     await this.page.evaluate(() => {
-      const c = document.querySelector('#trnAgreementGateModal canvas, .sign-agreement-modal canvas, canvas');
+      const c = document.querySelector('.modal.show canvas, .sign-agreement-modal.show canvas, #trnAgreementGateModal canvas, canvas');
       if (c) {
         const rect = c.getBoundingClientRect();
         const ctx = c.getContext('2d');
@@ -338,7 +352,7 @@ class AdminLoginPage extends BasePage {
     console.log(`[admin-login] Successfully authenticated. Current URL: ${this.page.url()}`);
 
     // If TRN Agreement gate modal appears on dashboard after login, resolve it immediately
-    const gateModal = this.page.locator('#trnAgreementGateModal, .sign-agreement-modal').first();
+    const gateModal = this.page.locator('.modal.show, .sign-agreement-modal.show, #scheduleAAgreementGateModal.show, #trnAgreementGateModal.show').first();
     const isGateModalVisible = await gateModal.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
     if (isGateModalVisible) {
       console.log('[admin-login] TRN Agreement gate modal detected on dashboard! Handling signing...');

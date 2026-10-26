@@ -5,8 +5,8 @@ const { RsvpPage } = require('../pages/consumer/RsvpPage');
 const { ExperiencePage } = require('../pages/consumer/ExperiencePage');
 const { CartPage } = require('../pages/consumer/CartPage');
 const { AdminLoginPage } = require('../pages/AdminLoginPage');
-const { RangeCreatePage } = require('../pages/range-create');
-const { ExperienceCreatePage } = require('../pages/experience-create');
+const { RangeCreatePage } = require('../pages/admin/RangeCreatePage');
+const { ExperienceCreatePage } = require('../pages/admin/ExperienceCreatePage');
 
 /** Every test receives ready page objects:  test('..', async ({ auth, dashboard, rsvp, adminLogin, rangeCreate, expCreate }) => {...}) */
 const test = base.test.extend({

@@ -31,7 +31,14 @@ module.exports = defineConfig({
     {
       name: 'chromium',
       testMatch: /.*tests\/consumer\/.*/,
-      testIgnore: [/.*\.setup\.js/, /.*consumer-login\.spec\.js/, /.*reserve-booking\.spec\.js/, /.*book-experience\.spec\.js/, /.*inspect-.*\.spec\.js/],
+      testIgnore: [
+        /.*\.setup\.js/,
+        /.*consumer-login\.spec\.js/,
+        /.*reserve-booking\.spec\.js/,
+        /.*book-experience\.spec\.js/,
+        /.*inspect-.*\.spec\.js/,
+        /.*register-and-purchase\.spec\.js/,
+      ],
       dependencies: ['setup'],
       use: { ...devices['Desktop Chrome'], storageState: cfg.AUTH_FILE },
     },

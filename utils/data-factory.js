@@ -229,7 +229,7 @@ function createUniqueProductData(overrides = {}) {
 const INSTRUCTOR_DEFAULTS = {
   firstName: 'Aarav',
   lastName: 'Sharma',
-  phone: '692-555-0147',
+  phone: '202-555-0147',
   password: 'Test@12345',
   dateOfBirth: '1995-05-15', // HTML5 date format YYYY-MM-DD
   gender: 'Male',
@@ -251,7 +251,7 @@ function generateInstructorData(overrides = {}) {
   return {
     ...INSTRUCTOR_DEFAULTS,
     lastName: `Sharma${stamp}`,
-    phone: `692${randomPhoneDigits}`,
+    phone: `202${randomPhoneDigits}`,
     email: `aarav.sharma.qa.${Date.now()}.${Math.floor(Math.random() * 1000)}@yopmail.com`,
     ...overrides,
   };
@@ -308,7 +308,7 @@ function generateRegistrationUser(overrides = {}) {
     firstName: `Alex${stamp}`,
     lastName: `Taylor${stamp}`,
     email,
-    phone: `692${randomPhoneDigits}`,
+    phone: `202${randomPhoneDigits}`,
     gender: 'Male',
     dob: 'Oct 24, 2000',
     address: {

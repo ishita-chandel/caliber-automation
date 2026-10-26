@@ -65,8 +65,7 @@ test.describe('Admin — Staff Creation and Role Assignment', () => {
     await staffPage.navigateViaMenu();
 
     // Verify assigned role is visible on the staff listing card
-    // caliberconnect@yopmail.com or test@mailinator.com is assigned Staff
-    await staffPage.verifyStaffInListing('caliberconnect@yopmail.com', 'Staff');
+    await staffPage.verifyStaffInListing('test@mailinator.com', 'Staff');
   });
 
   // ───────────────────────── NEGATIVE SCENARIOS ─────────────────────────
@@ -74,17 +73,17 @@ test.describe('Admin — Staff Creation and Role Assignment', () => {
   test('Test 4 & 5: Prevent Adding the Same Customer Twice (Duplicate Prevention)', async ({
     staffPage,
   }) => {
-    // Identify already-assigned customer: caliberconnect@yopmail.com
-    await staffPage.navigateViaMenu();
-    await staffPage.verifyStaffInListing('caliberconnect@yopmail.com');
+    // Ensure test customer is already added as staff before testing duplicate prevention
+    await staffPage.ensureStaffMemberAdded('test@mailinator.com', 'test user', 'Staff');
+    await staffPage.verifyStaffInListing('test@mailinator.com');
 
     // Navigate to Add Staff
     await staffPage.clickAdd();
 
     // Search for the exact same customer
-    const results = await staffPage.searchCustomer('caliberconnect@yopmail.com');
+    const results = await staffPage.searchCustomer('test@mailinator.com');
 
-    // The backend uses exclude_staff_range_id=205 to exclude already-assigned staff
+    // The backend excludes already-assigned staff
     expect(results.length).toBe(0);
 
     // Verify UI reflects no selectable results or No Options Available
@@ -92,7 +91,7 @@ test.describe('Admin — Staff Creation and Role Assignment', () => {
 
     // Return to listing and verify only one staff record exists for that customer
     await staffPage.navigateViaMenu();
-    await staffPage.verifySingleStaffRecord('caliberconnect@yopmail.com');
+    await staffPage.verifySingleStaffRecord('test@mailinator.com');
   });
 
   test('Test 6: Attempt to Save Without Selecting a Customer', async ({

@@ -3,7 +3,7 @@ const { markInbox, fetchOtp } = require('../../../utils/otp-helper');
 
 const TEST_EMAIL = 'test@mailinator.com';
 const RANGE_NAME = 'Range test 1';
-const RANGE_SLUG = 'range-test-1-1';
+const RANGE_SLUG = process.env.RANGE_SLUG || 'range-test-1';
 const PARTICIPANT_EMAIL = 'caliberconnect@yopmail.com';
 const SKILL_LEVEL = 'Beginner/In-training';
 const FIREARM = 'Handgun';
