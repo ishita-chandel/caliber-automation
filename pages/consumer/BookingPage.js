@@ -1,5 +1,6 @@
 const { expect } = require('@playwright/test');
 const { BasePage } = require('../shared/BasePage');
+const { calculateTargetSlotTime, parseSlotTime } = require('../../utils/timezone-helper');
 
 /**
  * Page object for Range Detail & Booking Form (RSVP)
@@ -39,6 +40,214 @@ class BookingPage extends BasePage {
       await this.guestTab.click();
       await this.page.waitForTimeout(1000);
     }
+  }
+
+  /**
+   * Retrieves the configured Range Timezone by inspecting the range data.
+   * Priority:
+   * 1. Response of `/api/v1/customer/range/{slug}`
+   * 2. Encrypted local storage `@calibercard-frontend` range data
+   * 3. API direct query fallback using slug
+   * Throws an error if timezone cannot be identified.
+   */
+  async getRangeTimezone(rangeSlug) {
+    let timezone = null;
+
+    // 1. Try reading from page localStorage (EncryptStorage with prefix @calibercard-frontend)
+    try {
+      timezone = await this.page.evaluate(() => {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.includes('range')) {
+            const val = localStorage.getItem(key);
+            if (val && val.includes('timezone')) {
+              try {
+                const parsed = JSON.parse(val);
+                if (parsed.timezone) return parsed.timezone;
+                if (parsed.address?.state?.timezone) return parsed.address.state.timezone;
+              } catch (_) {}
+            }
+          }
+        }
+        return null;
+      });
+    } catch (_) {}
+
+    // 2. Query customer range API directly if not resolved from localStorage
+    if (!timezone && rangeSlug) {
+      try {
+        const response = await this.page.request.get(
+          `https://caliberadmin.yatilabs.com/api/v1/customer/range/${rangeSlug}`,
+          { headers: { 'x-portal': 'CUSTOMER' } }
+        );
+        if (response.ok()) {
+          const json = await response.json();
+          timezone = json.data?.timezone || json.data?.address?.state?.timezone || null;
+        }
+      } catch (e) {
+        console.log(`[BookingPage] Failed to fetch range details via API: ${e.message}`);
+      }
+    }
+
+    if (!timezone) {
+      throw new Error(`[BookingPage] Could not reliably identify timezone for Range slug "${rangeSlug}".`);
+    }
+
+    return timezone;
+  }
+
+  /**
+   * Dynamically calculates target slot time based on Range-local time and selects an available slot.
+   *
+   * @param {string} rangeSlug - Slug of the current range
+   * @param {Object} [options={}]
+   * @param {boolean} [options.withinWindow=false] - If true, selects a slot within 2 hours of current range time (so check-in opens immediately). If false, selects >= 2 hours.
+   * @returns {Promise<{
+   *   timezone: string,
+   *   currentRangeTime: string,
+   *   targetRangeTime: string,
+   *   selectedDateStr: string,
+   *   selectedSlotTime: string
+   * }>}
+   */
+  async selectSlotDynamicByTimezone(rangeSlug, options = {}) {
+    const withinWindow = typeof options === 'boolean' ? options : (options?.withinWindow || false);
+    await this.dismissGoogleMapsDialog();
+    await this.ensureGuestTabActive();
+
+    // 1. Get Range Timezone
+    const timezone = await this.getRangeTimezone(rangeSlug);
+
+    // 2. Calculate Range Current & Target (+2 hours) Time
+    const { current, target } = calculateTargetSlotTime(timezone, 2);
+
+    console.log(`\n========================================`);
+    console.log(`[Timezone Calculation] Range Timezone Identifier: ${timezone}`);
+    console.log(`[Timezone Calculation] Current Range Local Time:   ${current.formatted} (${current.timeZone})`);
+    console.log(`[Timezone Calculation] Target Window (+2h):        ${target.formatted}`);
+    console.log(`[Timezone Calculation] Selection Mode:             ${withinWindow ? 'WITHIN 2 HOURS (Check-In Eligible Now)' : 'AFTER 2 HOURS'}`);
+    console.log(`========================================\n`);
+
+    const dayChips = this.page.locator('.cc-daychip:not(.icon)');
+    await expect(dayChips.first(), 'Expected date chips to be displayed').toBeVisible({ timeout: 10000 });
+    const dayChipsCount = await dayChips.count();
+
+    let selectedSlotText = null;
+    let selectedDateStr = target.dateStr;
+
+    // Check if target is today vs future date (e.g. crossing midnight)
+    const isTargetToday = target.dateStr === current.dateStr;
+
+    // Loop through available day chips to find the date and valid slot
+    for (let i = 0; i < dayChipsCount; i++) {
+      const chip = dayChips.nth(i);
+      const isChipDisabled = (await chip.getAttribute('class'))?.includes('disabled');
+      if (isChipDisabled) continue;
+
+      // Click chip
+      await chip.click({ force: true });
+      await this.page.waitForTimeout(1000);
+      await this.dismissGoogleMapsDialog();
+
+      // Check slot loader has completed
+      await this.page.locator('.cc-slots-loader').waitFor({ state: 'hidden', timeout: 8000 }).catch(() => {});
+
+      // Locate all rendered slots on this day
+      const slotLocators = this.page.locator('.cc-slot');
+      const slotCount = await slotLocators.count();
+
+      if (slotCount === 0) continue;
+
+      // Extract slot texts and availability
+      const slots = [];
+      for (let s = 0; s < slotCount; s++) {
+        const slotEl = slotLocators.nth(s);
+        const text = (await slotEl.innerText()).trim();
+        const className = (await slotEl.getAttribute('class')) || '';
+        const isAvailable = !className.includes('disabled');
+        const parsed = parseSlotTime(text);
+        if (parsed) {
+          slots.push({
+            index: s,
+            text,
+            isAvailable,
+            totalMinutes: parsed.totalMinutes,
+            locator: slotEl,
+          });
+        }
+      }
+
+      const currentMinutes = current.hour * 60 + current.minute;
+      const targetMinutes = target.hour * 60 + target.minute;
+
+      if (withinWindow) {
+        // Mode: Select slot within 2 hours of current range time (check-in is immediately open)
+        // For today (i === 0), look for an available slot between currentMinutes and targetMinutes (currentMinutes + 120)
+        let validSlots = [];
+        if (i === 0) {
+          validSlots = slots.filter((slot) => slot.isAvailable && slot.totalMinutes >= currentMinutes && slot.totalMinutes <= targetMinutes);
+        }
+
+        // If no slot strictly in [now, now+2h] on today, try any available slot on today within reasonable upcoming time or next available
+        if (validSlots.length === 0 && i === 0) {
+          validSlots = slots.filter((slot) => slot.isAvailable && slot.totalMinutes >= currentMinutes);
+        }
+
+        if (validSlots.length > 0) {
+          const chosenSlot = validSlots[0];
+          await chosenSlot.locator.click();
+          await this.page.waitForTimeout(500);
+          selectedSlotText = chosenSlot.text;
+          selectedDateStr = current.dateStr;
+          console.log(`[BookingPage] Selected slot within 2-hour window: "${selectedSlotText}" on ${selectedDateStr}`);
+          break;
+        } else {
+          console.log(`[BookingPage] No slot within window on today. Checking next chip...`);
+          continue;
+        }
+      } else {
+        // Mode: Filter slots >= target time (+2 hours or future dates)
+        if (i === 0 && isTargetToday) {
+          const validSlots = slots.filter((slot) => slot.isAvailable && slot.totalMinutes >= targetMinutes);
+
+          if (validSlots.length > 0) {
+            const chosenSlot = validSlots[0];
+            await chosenSlot.locator.click();
+            await this.page.waitForTimeout(500);
+            selectedSlotText = chosenSlot.text;
+            selectedDateStr = target.dateStr;
+            break;
+          } else {
+            console.log(`[BookingPage] No available slots >= ${target.timeStr} on current date (${current.dateStr}). Checking next available date chip.`);
+            continue;
+          }
+        } else {
+          // Future date: any available slot satisfies >= target time requirement
+          const validSlots = slots.filter((slot) => slot.isAvailable);
+          if (validSlots.length > 0) {
+            const chosenSlot = validSlots[0];
+            await chosenSlot.locator.click();
+            await this.page.waitForTimeout(500);
+            selectedSlotText = chosenSlot.text;
+            const dnum = await chip.locator('.dnum').innerText().catch(() => '');
+            selectedDateStr = dnum ? `${target.year}-${String(target.month).padStart(2, '0')}-${dnum.padStart(2, '0')}` : target.dateStr;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!selectedSlotText) {
+      throw new Error(`[BookingPage] Could not find any valid available slot (withinWindow=${withinWindow}) across available date chips.`);
+    }
+
+    return {
+      timezone,
+      currentRangeTime: current.formatted,
+      targetRangeTime: target.formatted,
+      selectedDateStr,
+      selectedSlotTime: selectedSlotText,
+    };
   }
 
   /** Select today's date chip, or next available date if today has no slots */

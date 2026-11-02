@@ -6,7 +6,17 @@ class BasePage {
   }
 
   async goto(url = '/') {
-    await this.page.goto(url, { waitUntil: 'domcontentloaded' });
+    try {
+      await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    } catch (e) {
+      // In case server bundle is slow or stalled, fall back to commit and wait for DOM element
+      if (e.message.includes('Timeout')) {
+        console.log(`[BasePage.goto] domcontentloaded timed out for ${url}, retrying with commit...`);
+        await this.page.goto(url, { waitUntil: 'commit', timeout: 30000 });
+      } else {
+        throw e;
+      }
+    }
     await this.waitReady();
   }
 

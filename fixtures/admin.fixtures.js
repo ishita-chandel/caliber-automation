@@ -5,6 +5,7 @@ const { ExperienceCreatePage } = require('../pages/admin/ExperienceCreatePage');
 const { InstructorPage } = require('../pages/admin/InstructorPage');
 const { RolePage } = require('../pages/admin/RolePage');
 const { StaffPage } = require('../pages/admin/StaffPage');
+const { AdminBookingPage } = require('../pages/admin/AdminBookingPage');
 
 /**
  * Admin-specific fixtures.
@@ -17,6 +18,7 @@ const test = base.test.extend({
   instructorPage: async ({ page }, use) => use(new InstructorPage(page)),
   rolePage:       async ({ page }, use) => use(new RolePage(page)),
   staffPage:      async ({ page }, use) => use(new StaffPage(page)),
+  adminBooking:   async ({ page }, use) => use(new AdminBookingPage(page)),
 });
 
 module.exports = { test, expect: base.expect };

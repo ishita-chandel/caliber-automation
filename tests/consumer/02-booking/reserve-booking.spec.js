@@ -1,9 +1,10 @@
 const { test, expect } = require('../../../fixtures/consumer.fixtures');
 const { markInbox, fetchOtp } = require('../../../utils/otp-helper');
+const { parseSlotTime } = require('../../../utils/timezone-helper');
 
 const TEST_EMAIL = 'test@mailinator.com';
 const RANGE_NAME = 'Range test 1';
-const RANGE_SLUG = process.env.RANGE_SLUG || 'range-test-1';
+const RANGE_SLUG = process.env.RANGE_SLUG || 'range-test-1-2';
 const PARTICIPANT_EMAIL = 'caliberconnect@yopmail.com';
 const SKILL_LEVEL = 'Beginner/In-training';
 const FIREARM = 'Handgun';
@@ -75,18 +76,40 @@ test.describe('Consumer Reserve Booking End-to-End', () => {
     });
 
     // ==========================================
-    // STEP 3: Select Reservation Details
+    // STEP 3: Select Reservation Details (Dynamic Range Timezone Slot Calculation)
     // ==========================================
-    await test.step('Step 3: Select date, available time slot, skill level, firearm, and note', async () => {
-      // Switch to Guest tab if Member requires membership
-      await bookingPage.ensureGuestTabActive();
+    let bookingSlotInfo = null;
+    await test.step('Step 3: Dynamically calculate target time (+2h in Range timezone) and select valid slot', async () => {
+      // Dynamically select available slot at or after Range current time + 2 hours
+      bookingSlotInfo = await bookingPage.selectSlotDynamicByTimezone(RANGE_SLUG);
 
-      // Select today's date
-      await bookingPage.selectTodayDate();
+      // Logging for audit and debugging
+      console.log(`\n========================================`);
+      console.log(`[Reserve Booking] Range Timezone:          ${bookingSlotInfo.timezone}`);
+      console.log(`[Reserve Booking] Current Range Time:      ${bookingSlotInfo.currentRangeTime}`);
+      console.log(`[Reserve Booking] Calculated Target Time:  ${bookingSlotInfo.targetRangeTime}`);
+      console.log(`[Reserve Booking] Selected Booking Date:   ${bookingSlotInfo.selectedDateStr}`);
+      console.log(`[Reserve Booking] Selected Available Slot: ${bookingSlotInfo.selectedSlotTime}`);
+      console.log(`========================================\n`);
 
-      // Select first available time slot
-      const selectedSlot = await bookingPage.selectFirstAvailableSlot();
-      console.log(`[Reserve Booking] Selected time slot: ${selectedSlot}`);
+      // Assertions verifying slot selection criteria
+      expect(bookingSlotInfo.timezone, 'Range timezone must be defined').toBeTruthy();
+      expect(bookingSlotInfo.selectedSlotTime, 'A valid slot must be selected').toBeTruthy();
+
+      // If booking is on today's date in range local time, verify slot is at or after target time
+      const targetDatePart = bookingSlotInfo.targetRangeTime.split(' ')[0];
+      if (bookingSlotInfo.selectedDateStr === targetDatePart) {
+        const targetTimePart = bookingSlotInfo.targetRangeTime.split(' ')[1];
+        const targetParsed = parseSlotTime(targetTimePart);
+        const selectedParsed = parseSlotTime(bookingSlotInfo.selectedSlotTime);
+
+        if (targetParsed && selectedParsed) {
+          expect(
+            selectedParsed.totalMinutes,
+            `Selected slot (${bookingSlotInfo.selectedSlotTime}) must be >= target time (${targetTimePart}) on date ${bookingSlotInfo.selectedDateStr}`
+          ).toBeGreaterThanOrEqual(targetParsed.totalMinutes);
+        }
+      }
 
       // Select Skill Level
       await bookingPage.selectSkillLevel(SKILL_LEVEL);

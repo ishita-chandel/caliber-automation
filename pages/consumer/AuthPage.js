@@ -38,9 +38,13 @@ class AuthPage extends BasePage {
       .locator('#cookie-accept-btn, button:has-text("Accept All"), button:has-text("Accept")')
       .first();
     if (await btn.isVisible({ timeout: 4000 }).catch(() => false)) {
-      await btn.click();
-      await this.page.waitForTimeout(300);
+      await btn.click({ force: true });
+      await this.page.waitForTimeout(500);
     }
+    // If backdrop still remains, remove it or ensure hidden
+    await this.page.evaluate(() => {
+      document.querySelectorAll('.cookie-banner-backdrop, .cookie-banner').forEach(el => el.remove());
+    }).catch(() => {});
   }
 
   /**
@@ -48,23 +52,27 @@ class AuthPage extends BasePage {
    * If the email input is already visible (e.g. direct navigation), skips the click.
    */
   async openLogin() {
+    await this.goto('/signin');
+    await this.dismissCookieBanner();
+    const emailInput = this.page.locator('input#phone-or-email, input[type="email"], input[placeholder*="email" i]').first();
+    if (await emailInput.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await this.shot('consumer-login-page');
+      return;
+    }
+
+    // Fallback: if /signin redirected to /, find and click Login button
     await this.goto('/');
     await this.dismissCookieBanner();
-    const emailAlreadyVisible = await this.page
-      .locator('input#phone-or-email')
-      .isVisible({ timeout: 3000 })
-      .catch(() => false);
-    if (!emailAlreadyVisible) {
-      const loginBtn = this.page
-        .locator('button.button--small')
-        .filter({ hasText: /^login$/i })
-        .or(this.page.getByRole('link', { name: /^login$/i }))
-        .first();
-      await loginBtn.waitFor({ state: 'visible', timeout: 10000 });
-      await loginBtn.click();
-      await this.page.waitForURL(/signin/, { timeout: 15000 });
-    }
-    await this.page.locator('input#phone-or-email').waitFor({ state: 'visible', timeout: 10000 });
+    const loginBtn = this.page
+      .locator('button.button--small')
+      .filter({ hasText: /^login$/i })
+      .or(this.page.getByRole('link', { name: /^login$/i }))
+      .first();
+    await loginBtn.waitFor({ state: 'visible', timeout: 15000 });
+    await this.dismissCookieBanner();
+    await loginBtn.click({ force: true });
+    await this.page.waitForURL(/signin/, { timeout: 15000 });
+    await this.page.locator('input#phone-or-email, input[type="email"]').first().waitFor({ state: 'visible', timeout: 10000 });
     await this.shot('consumer-login-page');
   }
 
